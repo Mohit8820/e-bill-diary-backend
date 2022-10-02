@@ -7,7 +7,10 @@ const Admin = require("../models/admin");
 const getUsers = async (req, res, next) => {
   let users;
   try {
-    users = await User.find({}, "-password");
+    users = await User.find(
+      { _id: { $not: { $eq: process.env.ADMIN_ID } } },
+      "-password"
+    );
   } catch {
     const error = new HttpError("fetching users failed", 500);
     return next(error);
@@ -117,6 +120,14 @@ const signup = async (req, res, next) => {
 const addNewBill = async (req, res, next) => {
   const userId = req.params.uid;
   const { currentReading } = req.body;
+  console.log(userId + " " + req.userData.userId + " " + process.env.ADMIN_ID);
+  if (
+    req.userData.userId.toString() !== process.env.ADMIN_ID &&
+    req.userData.userId.toString() !== userId
+  ) {
+    const error = new HttpError("You are not authorized to generate bill", 401);
+    return next(error);
+  }
 
   let user;
   try {
@@ -181,7 +192,23 @@ const addNewBill = async (req, res, next) => {
 
 const updateBillStatus = async (req, res, next) => {
   const bill_id = req.params.bid;
-  const { status, note, datePaid } = req.body;
+  const { status, note, datePaid, userId, billUserId } = req.body;
+
+  if (status === "Processing") {
+    if (
+      req.userData.userId.toString() !== process.env.ADMIN_ID &&
+      req.userData.userId.toString() !== userId
+    ) {
+      const error = new HttpError("You are not authorized to update bill", 401);
+      return next(error);
+    }
+  }
+  if (status === "Due" || status === "Paid") {
+    if (req.userData.userId.toString() !== process.env.ADMIN_ID) {
+      const error = new HttpError("You are not authorized to update bill", 401);
+      return next(error);
+    }
+  }
 
   User.updateOne(
     { "history._id": bill_id },
@@ -192,7 +219,7 @@ const updateBillStatus = async (req, res, next) => {
         "history.$.datePaid": datePaid,
       },
     },
-    function (err, founditem) {
+    async function (err, founditem) {
       if (!founditem) {
         res.status(404).json({ message: "bill status updation failed" });
       } else if (err) {
@@ -200,8 +227,25 @@ const updateBillStatus = async (req, res, next) => {
           message: "Something went wrong while updatind status of the bill",
         });
       } else {
+        let user;
+        try {
+          user = await User.findById(billUserId, "-password");
+        } catch (err) {
+          const error = new HttpError(
+            "updation failed while finding user",
+            404
+          );
+          return next(error);
+        }
+
+        if (!user) {
+          const error = new HttpError("User updating bill doesnt exist", 500);
+          return next(error);
+        }
+
         res.status(200).json({
           message: "Bill Status UPDATED",
+          user: user.toObject({ getters: true }),
         });
       }
     }
