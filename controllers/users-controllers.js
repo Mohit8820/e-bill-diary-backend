@@ -99,6 +99,7 @@ const signup = async (req, res, next) => {
         Reading: 0000,
         Amount: 0,
         Status: "Paid",
+        datePaid: new Date(),
         Note: "initial bill",
       },
     ],
@@ -115,6 +116,38 @@ const signup = async (req, res, next) => {
     userId: createdUser.id,
     name: createdUser.name,
   });
+};
+
+const updateUser = async (req, res, next) => {
+  const user_id = req.params.uid;
+  const { name, password } = req.body;
+  console.log(name + " " + password);
+
+  if (req.userData.userId.toString() !== process.env.ADMIN_ID) {
+    const error = new HttpError("You are not authorized to generate bill", 401);
+    return next(error);
+  }
+
+  User.findByIdAndUpdate(
+    user_id,
+    { name: name, password: password },
+    function (err, foundUser) {
+      console.log(foundUser);
+      if (!foundUser) {
+        res
+          .status(404)
+          .json({ message: "user updation failed while finding user" });
+      } else if (err) {
+        res
+          .status(404)
+          .json({ message: "Something went wrong while updating the user" });
+      } else {
+        res.status(200).json({
+          message: "user updated",
+        });
+      }
+    }
+  );
 };
 
 const addNewBill = async (req, res, next) => {
@@ -219,8 +252,8 @@ const updateBillStatus = async (req, res, next) => {
         "history.$.datePaid": datePaid,
       },
     },
-    async function (err, founditem) {
-      if (!founditem) {
+    async function (err, response) {
+      if (!response) {
         res.status(404).json({ message: "bill status updation failed" });
       } else if (err) {
         res.status(404).json({
@@ -254,30 +287,45 @@ const updateBillStatus = async (req, res, next) => {
 
 const deleteBill = async (req, res, next) => {
   const { user_id, bill_id } = req.query;
-  let user;
-  try {
-    user = await User.findById(user_id);
-  } catch (err) {
-    const error = new HttpError("error while finding user", 500);
-    return next(error);
-  }
 
-  if (!user) {
-    const error = new HttpError("could not find user to delete the ans", 404);
+  if (req.userData.userId.toString() !== process.env.ADMIN_ID) {
+    const error = new HttpError("You are not authorized to generate bill", 401);
     return next(error);
   }
 
   User.findOneAndUpdate(
     { _id: user_id },
     { $pull: { history: { _id: bill_id } } },
-    function (err, founditem) {
-      if (!err) {
-        res.status(200).json({ message: "bill deleted" });
-      }
-      if (err) {
+    async function (err, foundUser) {
+      console.log(foundUser);
+      if (!foundUser) {
+        res
+          .status(404)
+          .json({ message: "bill deletion failed while finding user" });
+      } else if (err) {
         res
           .status(404)
           .json({ message: "Something went wrong while deleting the bill" });
+      } else {
+        let user;
+        try {
+          user = await User.findById(user_id, "-password");
+        } catch (err) {
+          const error = new HttpError(
+            "deletion failed while finding user",
+            404
+          );
+          return next(error);
+        }
+
+        if (!user) {
+          const error = new HttpError("User of bill doesnt exist", 500);
+          return next(error);
+        }
+        res.status(200).json({
+          message: "Bill deleted",
+          user: user.toObject({ getters: true }),
+        });
       }
     }
   );
@@ -287,6 +335,7 @@ exports.getUsers = getUsers;
 exports.getUserbyId = getUserbyId;
 exports.signup = signup;
 exports.login = login;
+exports.updateUser = updateUser;
 exports.addNewBill = addNewBill;
 exports.updateBillStatus = updateBillStatus;
 exports.deleteBill = deleteBill;

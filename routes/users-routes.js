@@ -15,6 +15,8 @@ router.post("/signup", usersController.signup);
 
 router.use(checkAuth); //checke for valid token to continue below
 
+router.patch("/updateUser/:uid", usersController.updateUser);
+
 router.patch("/new/:uid", usersController.addNewBill);
 
 router.patch("/update/:bid", usersController.updateBillStatus);
