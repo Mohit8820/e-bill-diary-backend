@@ -295,7 +295,7 @@ const deleteBill = async (req, res, next) => {
 
   User.findOneAndUpdate(
     { _id: user_id },
-    { $pull: { history: { _id: bill_id } } },
+    { $pull: { history: { _id: bill_id } } }, //can add {new:true} to get updated user
     async function (err, foundUser) {
       console.log(foundUser);
       if (!foundUser) {
